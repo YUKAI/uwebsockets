@@ -2,14 +2,12 @@
 Websockets protocol
 """
 
-import logging
 import ure as re
 import ustruct as struct
 import urandom as random
 import usocket as socket
 from ucollections import namedtuple
-
-LOGGER = logging.getLogger(__name__)
+import uselect
 
 # Opcodes
 OP_CONT = const(0x0)
@@ -72,6 +70,9 @@ class Websocket:
     def __init__(self, sock):
         self.sock = sock
         self.open = True
+        self.poller = uselect.poll()
+        self.poller.register(self.sock, uselect.POLLIN)
+        self.timeout = -1
 
     def __enter__(self):
         return self
@@ -80,13 +81,17 @@ class Websocket:
         self.close()
 
     def settimeout(self, timeout):
-        self.sock.settimeout(timeout)
+        self.timeout = timeout
 
     def read_frame(self, max_size=None):
         """
         Read a frame from the socket.
         See https://tools.ietf.org/html/rfc6455#section-5.2 for the details.
         """
+
+        res = self.poller.poll(self.timeout)
+        if not res:
+            raise NoDataException
 
         # Frame header
         two_bytes = self.sock.read(2)
@@ -116,8 +121,7 @@ class Websocket:
             data = self.sock.read(length)
         except MemoryError:
             # We can't receive this many bytes, close the socket
-            if __debug__: LOGGER.debug("Frame of length %s too big. Closing",
-                                       length)
+            print("Frame of length {} too big. Closing".format(length))
             self.close(code=CLOSE_TOO_BIG)
             return True, OP_CLOSE, None
 
@@ -186,7 +190,7 @@ class Websocket:
             except NoDataException:
                 return ''
             except ValueError:
-                LOGGER.debug("Failed to read frame. Socket dead.")
+                print("Failed to read frame. Socket dead.")
                 self._close()
                 raise ConnectionClosed()
 
@@ -205,7 +209,7 @@ class Websocket:
                 continue
             elif opcode == OP_PING:
                 # We need to send a pong frame
-                if __debug__: LOGGER.debug("Sending PONG")
+                print("Sending PONG")
                 self.write_frame(OP_PONG, data)
                 # And then wait to receive
                 continue
@@ -241,6 +245,6 @@ class Websocket:
         self._close()
 
     def _close(self):
-        if __debug__: LOGGER.debug("Connection closed")
+        print("Connection closed")
         self.open = False
         self.sock.close()

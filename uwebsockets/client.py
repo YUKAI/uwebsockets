@@ -5,15 +5,12 @@ Based very heavily off
 https://github.com/aaugustin/websockets/blob/master/websockets/client.py
 """
 
-import logging
 import usocket as socket
 import ubinascii as binascii
 import urandom as random
 import ussl
 
 from .protocol import Websocket, urlparse
-
-LOGGER = logging.getLogger(__name__)
 
 
 class WebsocketClient(Websocket):
@@ -27,8 +24,7 @@ def connect(uri):
     uri = urlparse(uri)
     assert uri
 
-    if __debug__: LOGGER.debug("open connection %s:%s",
-                                uri.hostname, uri.port)
+    print("open connection {}:{}".format(uri.hostname, uri.port))
 
     sock = socket.socket()
     addr = socket.getaddrinfo(uri.hostname, uri.port)
@@ -37,7 +33,7 @@ def connect(uri):
         sock = ussl.wrap_socket(sock)
 
     def send_header(header, *args):
-        if __debug__: LOGGER.debug(str(header), *args)
+        print(str(header), *args)
         sock.write(header % args + '\r\n')
 
     # Sec-WebSocket-Key is 16 bytes of random base64 encoded
@@ -62,7 +58,7 @@ def connect(uri):
     # We don't (currently) need these headers
     # FIXME: should we check the return key?
     while header:
-        if __debug__: LOGGER.debug(str(header))
+        print(str(header))
         header = sock.readline()[:-2]
 
     return WebsocketClient(sock)
